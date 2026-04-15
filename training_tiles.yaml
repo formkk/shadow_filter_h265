@@ -1,0 +1,28 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# Training tiles dataset configuration for incremental training
+
+# Dataset root directory (relative to this YAML file)
+path: training_tiles
+
+# Train and validation splits (using all data for training since no validation split exists)
+train: zhedang
+val: zhengchang  # Using zhengchang as validation for now
+
+# Class names
+names:
+  0: zhedang    # 遮挡 (blocked/occluded)
+  1: zhengchang # 正常 (normal)
+
+# Dataset statistics
+# Total images: 5,226
+# - zhedang: 3,903 images (74.7%)
+# - zhengchang: 1,323 images (25.3%)
+# 
+# Note: This dataset has a class imbalance (approximately 3:1 ratio)
+# Consider using class weights or data balancing techniques during training
+#
+# Recommended training parameters:
+# - epochs: 20-30
+# - lr0: 0.001
+# - batch: 16
+# - patience: 10

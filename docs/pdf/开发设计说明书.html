@@ -1,0 +1,289 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <title>开发设计说明书.md</title>
+        <style>
+        
+@font-face {
+    font-family: "FangSong";
+    src: url("/usr/share/fonts/simfang.ttf");
+}
+
+@page {
+    size: A4;
+    margin: 2.5cm;
+    margin-bottom: 3cm;
+}
+
+body {
+    font-family: "FangSong", sans-serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    word-break: break-all;
+    word-wrap: break-word;
+}
+
+p {
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+li {
+    margin-bottom: 5px;
+    text-align: left;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "FangSong", sans-serif;
+    font-weight: bold;
+}
+
+code, pre {
+    font-family: "FangSong", monospace;
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+}
+
+table {
+    border: 1px solid #000;
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+}
+td, th {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+        </style>
+    </head>
+    <body>
+        <h1>软件系统开发设计说明书</h1>
+<h2>1. 引言</h2>
+<h3>1.1 文档目的</h3>
+<p>本文档旨在详细描述 Shadow Filter H265 系统的软件架构、模块设计、数据流程及接口定义。文档作为系统开发、维护和后续功能扩展的技术基准。</p>
+<h3>1.2 适用范围</h3>
+<p>本文档适用于参与本系统开发、测试、部署及维护的技术人员。</p>
+<h3>1.3 术语定义</h3>
+<ul>
+<li><strong>ONVIF</strong>: Open Network Video Interface Forum，开放型网络视频接口论坛标准。</li>
+<li><strong>RTSP</strong>: Real Time Streaming Protocol，实时流传输协议。</li>
+<li><strong>YOLO</strong>: You Only Look Once，一种高效的目标检测算法。</li>
+<li><strong>MediaMTX</strong>: 开源的高性能 RTSP/RTMP/WebRTC 流媒体服务器。</li>
+</ul>
+<hr />
+<h2>2. 系统概述</h2>
+<h3>2.1 系统目标</h3>
+<p>本系统旨在构建一个高性能的多路视频智能处理平台。系统核心功能包括：
+1.  <strong>实时采集</strong>: 支持 4 路模拟摄像头的高帧率同步采集。
+2.  <strong>智能筛选</strong>: 基于 YOLOv8 算法实时检测目标，动态切换输出画面。
+3.  <strong>双模推流</strong>: 同时提供 H.264 和 H.265 编码格式的视频流，适配不同终端。
+4.  <strong>标准兼容</strong>: 遵循 ONVIF Profile S/T 标准，无缝对接主流 NVR 和 VMS 平台。</p>
+<h3>2.2 系统架构</h3>
+<p>系统采用模块化分层架构设计，自底向上分为：
+*   <strong>硬件接入层</strong>: 基于 V4L2 协议管理 <code>/dev/video*</code> 设备。
+*   <strong>核心处理层</strong>: 包含图像预处理、AI 推理引擎、业务逻辑控制。
+*   <strong>媒体传输层</strong>: 基于 FFmpeg 进行视频编码，利用 MediaMTX 分发流媒体。
+*   <strong>服务接口层</strong>: 提供 ONVIF SOAP 服务和 RTSP 播放接口。</p>
+<h3>2.3 硬件环境依赖</h3>
+<ul>
+<li><strong>CPU</strong>: x86_64 架构，建议多核高主频。</li>
+<li><strong>GPU</strong>: NVIDIA 显卡（支持 CUDA），用于 AI 加速和 NVENC 硬件编码。</li>
+<li><strong>视频采集卡</strong>: 支持 V4L2 协议的 4 路模拟视频采集卡。</li>
+</ul>
+<hr />
+<h2>3. 模块设计详情</h2>
+<h3>3.1 视频采集模块 (Video Acquisition)</h3>
+<ul>
+<li><strong>类名</strong>: <code>AsyncCameraCapture</code></li>
+<li><strong>功能</strong>: 负责从物理设备读取视频帧。</li>
+<li><strong>设计机制</strong>:<ul>
+<li><strong>异步线程</strong>: 每个摄像头拥有独立的采集线程，避免 I/O 阻塞主进程。</li>
+<li><strong>队列缓冲</strong>: 使用 <code>collections.deque</code> (maxlen=1) 仅保留最新帧，确保低延迟。</li>
+<li><strong>异常恢复</strong>: 内置重连机制，当设备断开或读取失败时自动尝试重新初始化。</li>
+</ul>
+</li>
+</ul>
+<h3>3.2 智能推理模块 (AI Inference)</h3>
+<ul>
+<li><strong>类名</strong>: <code>OptimizedMemoryFrameProcessor</code></li>
+<li><strong>功能</strong>: 执行目标检测任务。</li>
+<li><strong>设计机制</strong>:<ul>
+<li><strong>Batch Processing</strong>: 将 4 路图像打包为一个 Batch 输入 GPU，显著提升吞吐量。</li>
+<li><strong>内存优化</strong>: 使用 Numpy 视图（View）而非拷贝（Copy）进行图像切片，降低内存带宽占用。</li>
+<li><strong>模型</strong>: 集成 YOLOv8，支持半精度（FP16）推理。</li>
+</ul>
+</li>
+</ul>
+<h3>3.3 图像处理模块 (Image Processing)</h3>
+<ul>
+<li><strong>类名</strong>: <code>SyncFrameProcessor</code></li>
+<li><strong>功能</strong>: 视频合成与画质增强。</li>
+<li><strong>核心算法</strong>:<ul>
+<li><strong>画面合成</strong>:<ul>
+<li><strong>Monitor Stream</strong>: 拼接 4 路画面为 2x2 网格 (720x720)。</li>
+<li><strong>Filter Stream</strong>: 根据检测置信度动态裁切单路画面 (720x576)。</li>
+</ul>
+</li>
+<li><strong>时域亮度稳定 (Temporal Brightness)</strong>:<ul>
+<li>采用指数移动平均 (EMA) 算法平滑亮度变化。</li>
+<li>默认目标均值: 110.0，平滑系数: 0.01。</li>
+</ul>
+</li>
+<li><strong>降噪 (Denoising)</strong>: 支持中值滤波、高斯滤波等多种算法，默认开启中值降噪以去除模拟信号噪点。</li>
+</ul>
+</li>
+</ul>
+<h3>3.4 视频编码与推流模块 (Encoding &amp; Streaming)</h3>
+<ul>
+<li><strong>类名</strong>: <code>RTSPStreamServer</code></li>
+<li><strong>功能</strong>: 视频压缩与传输。</li>
+<li><strong>双编码架构</strong>:<ul>
+<li>系统同时维护两组编码管道：H.264 (兼容性好) 和 H.265 (压缩率高)。</li>
+<li><strong>H.264</strong>: 使用 <code>libx264</code> 软编或 <code>h264_nvenc</code> 硬编。</li>
+<li><strong>H.265</strong>: 优先使用 <code>hevc_nvenc</code> 硬件编码。</li>
+</ul>
+</li>
+<li><strong>MediaMTX 集成</strong>:<ul>
+<li>系统内置管理 <code>mediamtx</code> 进程，自动生成 <code>mediamtx.yml</code> 配置文件。</li>
+<li>配置 <code>source: publisher</code> 模式，接受 FFmpeg 推送。</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2>4. 服务接口设计</h2>
+<h3>4.1 ONVIF 服务接口</h3>
+<p>系统模拟了 4 个独立的 ONVIF 设备，分别对应不同的业务需求：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">端口</th>
+<th style="text-align: left;">设备标识</th>
+<th style="text-align: left;">编码格式</th>
+<th style="text-align: left;">视频内容</th>
+<th style="text-align: left;">分辨率</th>
+<th style="text-align: left;">适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>18000</strong></td>
+<td style="text-align: left;">Device A</td>
+<td style="text-align: left;">H.264</td>
+<td style="text-align: left;">智能筛选 (Filter)</td>
+<td style="text-align: left;">720x576</td>
+<td style="text-align: left;">主流 NVR 录像</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>18001</strong></td>
+<td style="text-align: left;">Device B</td>
+<td style="text-align: left;">H.264</td>
+<td style="text-align: left;">全景监控 (Monitor)</td>
+<td style="text-align: left;">720x720</td>
+<td style="text-align: left;">实时监看</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>19000</strong></td>
+<td style="text-align: left;">Device C</td>
+<td style="text-align: left;">H.265</td>
+<td style="text-align: left;">智能筛选 (Filter)</td>
+<td style="text-align: left;">720x576</td>
+<td style="text-align: left;">低带宽存储</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>19001</strong></td>
+<td style="text-align: left;">Device D</td>
+<td style="text-align: left;">H.265</td>
+<td style="text-align: left;">全景监控 (Monitor)</td>
+<td style="text-align: left;">720x720</td>
+<td style="text-align: left;">高效监控</td>
+</tr>
+</tbody>
+</table>
+<p>每个端口均提供标准的 WS-Discovery 发现服务和 SOAP 媒体服务。</p>
+<h3>4.2 RTSP 流媒体接口</h3>
+<p>基于 TCP/UDP 8554 端口，提供以下直接访问地址：
+*   <code>rtsp://&lt;IP&gt;:8554/monitor_h264</code>
+*   <code>rtsp://&lt;IP&gt;:8554/filter_h264</code>
+*   <code>rtsp://&lt;IP&gt;:8554/monitor_h265</code>
+*   <code>rtsp://&lt;IP&gt;:8554/filter_h265</code></p>
+<h3>4.3 命令行接口 (CLI)</h3>
+<p>支持通过命令行参数调整系统行为，关键参数包括：
+*   <code>--model</code>: 指定模型路径
+*   <code>--conf</code>: 置信度阈值
+*   <code>--temporal-target</code>: 亮度目标值 (默认 85.0)
+*   <code>--public-ip</code>: NAT 穿透 IP 设置</p>
+<hr />
+<h2>5. 安全设计</h2>
+<h3>5.1 身份认证机制</h3>
+<p>系统实现了基于 RTSP 标准的摘要/基础认证：
+*   <strong>认证范围</strong>: RTSP 拉流、RTSP 推流、ONVIF 接口调用。
+*   <strong>配置方式</strong>: 通过环境变量动态注入，避免硬编码。
+    *   <code>RTSP_READ_USER</code> / <code>RTSP_READ_PASS</code>: 读取/播放权限。
+    *   <code>RTSP_PUBLISH_USER</code> / <code>RTSP_PUBLISH_PASS</code>: 推流/发布权限。</p>
+<h3>5.2 权限隔离</h3>
+<ul>
+<li><strong>Publisher</strong>: 仅允许内部 FFmpeg 进程推送视频流。</li>
+<li><strong>Reader</strong>: 外部客户端仅拥有拉流和查看权限，无法修改服务器配置。</li>
+</ul>
+<hr />
+<h2>6. 数据流图 (Data Flow)</h2>
+<pre><code class="language-mermaid">graph LR
+    Cams[摄像头 0-3] --&gt;|V4L2| Cap[采集模块]
+    Cap --&gt;|Raw Frames| AI[AI 推理模块]
+    Cap --&gt;|Raw Frames| Proc[图像处理模块]
+    AI --&gt;|Detections| Proc
+    Proc --&gt;|合成画面| Enc[FFmpeg 编码器组]
+    Enc --&gt;|RTSP Push| MTX[MediaMTX 服务器]
+    MTX --&gt;|RTSP Pull| Client[NVR/播放器]
+
+    subgraph &quot;ONVIF 服务层&quot;
+        P18000[Port 18000] -.-&gt;|控制| MTX
+        P18001[Port 18001] -.-&gt;|控制| MTX
+        P19000[Port 19000] -.-&gt;|控制| MTX
+        P19001[Port 19001] -.-&gt;|控制| MTX
+    end
+</code></pre>
+<hr />
+<h2>7. 附录：配置项清单</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">环境变量</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>RTSP_READ_USER</code></td>
+<td style="text-align: left;">shadow</td>
+<td style="text-align: left;">播放用户名</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RTSP_READ_PASS</code></td>
+<td style="text-align: left;">password147</td>
+<td style="text-align: left;">播放密码</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RTSP_PUBLISH_USER</code></td>
+<td style="text-align: left;">shadow</td>
+<td style="text-align: left;">推流用户名</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RTSP_PUBLISH_PASS</code></td>
+<td style="text-align: left;">password147</td>
+<td style="text-align: left;">推流密码</td>
+</tr>
+</tbody>
+</table>
+    </body>
+    </html>
+    

@@ -1,0 +1,13 @@
+path: /media/mqzx/18T/DATA/FTP/jf_data/tempory/all_images/select/process_data/usedata
+train: train
+val: val
+
+# Classes
+names:
+  0: zhedang
+  1: zhengchang
+
+# Imagenet class codes to human-readable names
+map:
+  cls1: zhedang
+  cls2: zhengchang

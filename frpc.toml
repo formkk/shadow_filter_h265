@@ -1,0 +1,34 @@
+serverAddr = "117.72.39.181"
+serverPort = 7000
+
+[auth]
+method = "token"
+token = "018200"
+
+[[proxies]]
+name = "ssh_shadow"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 22
+remotePort = 2223
+
+[[proxies]]
+name = "rtsp_shadow"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8554
+remotePort = 8554
+
+[[proxies]]
+name = "onvif_monitor_shadow"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 18000
+remotePort = 18000
+
+[[proxies]]
+name = "onvif_filter_shadow"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 18001
+remotePort = 18001

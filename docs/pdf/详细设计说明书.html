@@ -1,0 +1,319 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <title>详细设计说明书.md</title>
+        <style>
+        
+@font-face {
+    font-family: "FangSong";
+    src: url("/usr/share/fonts/simfang.ttf");
+}
+
+@page {
+    size: A4;
+    margin: 2.5cm;
+    margin-bottom: 3cm;
+}
+
+body {
+    font-family: "FangSong", sans-serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    word-break: break-all;
+    word-wrap: break-word;
+}
+
+p {
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+li {
+    margin-bottom: 5px;
+    text-align: left;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "FangSong", sans-serif;
+    font-weight: bold;
+}
+
+code, pre {
+    font-family: "FangSong", monospace;
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+}
+
+table {
+    border: 1px solid #000;
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+}
+td, th {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+        </style>
+    </head>
+    <body>
+        <h1>软件详细设计说明书</h1>
+<h2>1. 引言</h2>
+<h3>1.1 编写目的</h3>
+<p>本文档为 Shadow Filter H265 系统的详细设计说明书，旨在对系统的各个功能模块、类结构、接口定义及核心算法进行微观层面的详细描述，为代码实现和后续维护提供直接依据。</p>
+<h3>1.2 适用范围</h3>
+<p>本文档适用于开发人员、测试人员及系统维护人员。</p>
+<hr />
+<h2>2. 系统类设计 (Class Design)</h2>
+<h3>2.1 视频采集类 (<code>AsyncCameraCapture</code>)</h3>
+<p>负责单一视频源的异步采集，确保采集过程不阻塞主线程。</p>
+<ul>
+<li>
+<p><strong>属性</strong>:</p>
+<ul>
+<li><code>src (int/str)</code>: 视频设备索引或路径（如 <code>/dev/video0</code>）。</li>
+<li><code>cap (cv2.VideoCapture)</code>: OpenCV 视频捕获对象。</li>
+<li><code>queue (collections.deque)</code>: 帧缓冲区，<code>maxlen=1</code>，仅保留最新帧。</li>
+<li><code>running (bool)</code>: 线程运行控制标志。</li>
+<li><code>lock (threading.Lock)</code>: 线程安全锁。</li>
+<li><code>reconnect_interval (float)</code>: 重连间隔（默认 2.0s）。</li>
+</ul>
+</li>
+<li>
+<p><strong>方法</strong>:</p>
+<ul>
+<li><code>__init__(src, width=720, height=576, fps=25)</code>: 初始化采集参数。</li>
+<li><code>start()</code>: 启动采集线程。</li>
+<li><code>stop()</code>: 停止线程并释放资源。</li>
+<li><code>read()</code>: 从队列获取最新帧（非阻塞），返回 <code>(ret, frame)</code>。</li>
+<li><code>_update()</code>: 内部线程循环方法，执行 <code>cap.read()</code> 并写入队列；包含断线重连逻辑。</li>
+</ul>
+</li>
+</ul>
+<h3>2.2 AI 推理类 (<code>OptimizedMemoryFrameProcessor</code>)</h3>
+<p>封装 YOLOv8 模型，负责多路视频的目标检测。</p>
+<ul>
+<li>
+<p><strong>属性</strong>:</p>
+<ul>
+<li><code>model (ultralytics.YOLO)</code>: 加载的 YOLO 模型实例。</li>
+<li><code>batch_size (int)</code>: 推理时的 Batch 大小（默认 4）。</li>
+<li><code>conf_threshold (float)</code>: 置信度阈值。</li>
+<li><code>input_buffer (np.ndarray)</code>: 预分配的输入 Tensor 内存。</li>
+</ul>
+</li>
+<li>
+<p><strong>方法</strong>:</p>
+<ul>
+<li><code>process_batch(frames)</code>: 接收帧列表，执行批量推理。<ul>
+<li><em>优化细节</em>: 使用 Numpy <code>view</code> 切片而非 <code>copy</code> 组合 Batch，减少内存带宽占用。</li>
+</ul>
+</li>
+<li><code>_post_process(results)</code>: 解析模型输出，提取 Bounding Box 和 Class ID。</li>
+</ul>
+</li>
+</ul>
+<h3>2.3 核心处理类 (<code>SyncFrameProcessor</code>)</h3>
+<p>系统的中枢控制器，协调采集、推理、合成与推流。</p>
+<ul>
+<li>
+<p><strong>属性</strong>:</p>
+<ul>
+<li><code>cameras (List[AsyncCameraCapture])</code>: 摄像头实例列表。</li>
+<li><code>rtsp_server (RTSPStreamServer)</code>: RTSP 服务器实例。</li>
+<li><code>temporal_brightness_tracker (float)</code>: 当前亮度增益值。</li>
+<li><code>target_brightness (float)</code>: 目标亮度均值 (85.0)。</li>
+</ul>
+</li>
+<li>
+<p><strong>方法</strong>:</p>
+<ul>
+<li><code>start_processing()</code>: 启动所有子模块。</li>
+<li><code>_processing_loop()</code>: 主循环。<ul>
+<li>同步读取 4 路摄像头帧。</li>
+<li>调用 <code>process_batch</code> 获取检测结果。</li>
+<li>执行 <code>apply_temporal_brightness</code> 调整亮度。</li>
+<li>执行 <code>apply_denoise</code> 降噪。</li>
+<li>调用 <code>rtsp_server</code> 推送数据。</li>
+</ul>
+</li>
+<li><code>apply_temporal_brightness(frame)</code>: 执行时域亮度稳定算法。</li>
+<li><code>apply_denoise(frame)</code>: 执行中值/高斯降噪。</li>
+</ul>
+</li>
+</ul>
+<h3>2.4 流媒体服务类 (<code>RTSPStreamServer</code>)</h3>
+<p>管理 FFmpeg 子进程，处理 H.264/H.265 双编码推流。</p>
+<ul>
+<li>
+<p><strong>属性</strong>:</p>
+<ul>
+<li><code>monitor_ffmpeg_processes (dict)</code>: 监控流 FFmpeg 进程句柄表 <code>{'h264': Popen, 'h265': Popen}</code>。</li>
+<li><code>filter_ffmpeg_processes (dict)</code>: 筛选流 FFmpeg 进程句柄表。</li>
+<li><code>publish_user/pass</code>: 推流鉴权凭证。</li>
+</ul>
+</li>
+<li>
+<p><strong>方法</strong>:</p>
+<ul>
+<li><code>start_monitor_stream(fps)</code>: 启动监控流 FFmpeg 管道。</li>
+<li><code>start_filter_stream(fps)</code>: 启动筛选流 FFmpeg 管道。</li>
+<li><code>push_frame(frame, stream_type)</code>: 向指定管道的标准输入写入 Raw Video 数据。</li>
+<li><code>_format_rtsp_url(path)</code>: 生成带鉴权信息的推流 URL。</li>
+<li><code>_check_and_restart()</code>: 监控 FFmpeg 进程状态，异常退出时自动重启。</li>
+</ul>
+</li>
+</ul>
+<h3>2.5 ONVIF 服务类 (<code>OnvifHttpServer</code>)</h3>
+<p>实现 ONVIF Profile S/T 协议的 SOAP 接口。</p>
+<ul>
+<li>
+<p><strong>属性</strong>:</p>
+<ul>
+<li><code>bind_port</code>: HTTP 监听端口。</li>
+<li><code>visible_profiles</code>: 当前服务暴露的 Profile 列表（如 <code>['monitor']</code>）。</li>
+<li><code>snapshot_callback</code>: 获取截图的回调函数。</li>
+</ul>
+</li>
+<li>
+<p><strong>方法</strong>:</p>
+<ul>
+<li><code>do_POST()</code>: 处理 SOAP 请求入口。</li>
+<li><code>_verify_auth(body)</code>: 解析 WS-UsernameToken 进行鉴权。</li>
+<li><code>_soap_get_profiles()</code>: 返回 XML 格式的 Profile 列表。</li>
+<li><code>_soap_get_stream_uri()</code>: 返回 RTSP 播放地址。</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2>3. 核心算法设计</h2>
+<h3>3.1 时域亮度稳定算法 (Temporal Brightness Stabilization)</h3>
+<p>为解决模拟摄像头自动曝光波动导致的画面闪烁，采用指数移动平均 (EMA) 算法控制亮度增益。</p>
+<ul>
+<li>
+<p><strong>公式</strong>:
+    $$ \text{Avg}<em>{\text{curr}} = \text{mean}(\text{Frame}</em>{\text{gray}}) $$
+    $$ \text{Gain}<em>{\text{target}} = \frac{\text{Target}}{\text{Avg}</em>{\text{curr}} + \epsilon} $$
+    $$ \text{Gain}<em>{\text{smoothed}} = \alpha \cdot \text{Gain}</em>{\text{target}} + (1 - \alpha) \cdot \text{Gain}<em>{\text{prev}} $$
+    $$ \text{Pixel}</em>{\text{out}} = \text{clip}(\text{Pixel}<em>{\text{in}} \cdot \text{Gain}</em>{\text{smoothed}}, 0, 255) $$</p>
+</li>
+<li>
+<p><strong>参数</strong>:</p>
+<ul>
+<li>Target: 85.0 (默认)</li>
+<li>Alpha: 0.01 (平滑系数)</li>
+</ul>
+</li>
+</ul>
+<h3>3.2 画面合成逻辑</h3>
+<h4>3.2.1 Monitor Stream (全景监控)</h4>
+<ul>
+<li><strong>分辨率</strong>: 720x720</li>
+<li><strong>布局</strong>: 2x2 网格</li>
+<li><strong>实现</strong>: 将 4 路 720x576 的原始画面各自缩放至 360x288 (或保持比例)，拼接至目标画布。</li>
+</ul>
+<h4>3.2.2 Filter Stream (智能筛选)</h4>
+<ul>
+<li><strong>分辨率</strong>: 720x576</li>
+<li><strong>逻辑</strong>:<ol>
+<li>遍历 4 路检测结果。</li>
+<li>若某路检测到目标（置信度 &gt; 阈值），将该路画面作为输出。</li>
+<li>若多路同时检测到，优先选择置信度最高或序号最小的一路。</li>
+<li>若无目标，默认输出 Channel 0 或保持上一帧画面（可配置）。</li>
+</ol>
+</li>
+</ul>
+<hr />
+<h2>4. 接口详细定义</h2>
+<h3>4.1 命令行参数 (CLI)</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">参数</th>
+<th style="text-align: left;">类型</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>--model</code></td>
+<td style="text-align: left;">str</td>
+<td style="text-align: left;"><code>./best.pt</code></td>
+<td style="text-align: left;">YOLO 模型路径</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>--conf</code></td>
+<td style="text-align: left;">float</td>
+<td style="text-align: left;"><code>0.7</code></td>
+<td style="text-align: left;">置信度阈值</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>--batch-size</code></td>
+<td style="text-align: left;">int</td>
+<td style="text-align: left;"><code>32</code></td>
+<td style="text-align: left;">推理 Batch Size</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>--temporal-target</code></td>
+<td style="text-align: left;">float</td>
+<td style="text-align: left;"><code>85.0</code></td>
+<td style="text-align: left;">亮度目标均值</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>--no-denoise</code></td>
+<td style="text-align: left;">bool</td>
+<td style="text-align: left;"><code>False</code></td>
+<td style="text-align: left;">是否禁用降噪</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>--public-ip</code></td>
+<td style="text-align: left;">str</td>
+<td style="text-align: left;"><code>117.72.39.181</code></td>
+<td style="text-align: left;">对外宣告 IP</td>
+</tr>
+</tbody>
+</table>
+<h3>4.2 环境变量</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">变量名</th>
+<th style="text-align: left;">必填</th>
+<th style="text-align: left;">默认值</th>
+<th style="text-align: left;">作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>RTSP_PUBLISH_PASS</code></td>
+<td style="text-align: left;">否</td>
+<td style="text-align: left;"><code>password147</code></td>
+<td style="text-align: left;">推流认证密码</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>RTSP_READ_PASS</code></td>
+<td style="text-align: left;">否</td>
+<td style="text-align: left;"><code>password147</code></td>
+<td style="text-align: left;">拉流认证密码</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>5. 异常处理设计</h2>
+<ol>
+<li><strong>摄像头断连</strong>: <code>AsyncCameraCapture</code> 捕获 <code>cv2.read()</code> 异常，重置 <code>VideoCapture</code> 对象，间隔 2s 重试。</li>
+<li><strong>FFmpeg 崩溃</strong>: <code>RTSPStreamServer</code> 每次推流前检查 <code>poll()</code> 状态，若进程已结束，立即重启该路推流管道。</li>
+<li><strong>MediaMTX 启动失败</strong>: <code>mediamtx_manager</code> 尝试杀掉占用端口的旧进程，若仍失败则打印错误但不退出主程序（假设外部已启动）。</li>
+</ol>
+    </body>
+    </html>
+    

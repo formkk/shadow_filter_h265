@@ -1,0 +1,13 @@
+2025-12-24T01:01:32.131446 - 系统异常: RuntimeError: reentrant call inside <_io.BufferedWriter name='<stdout>'>
+详细堆栈: Traceback (most recent call last):
+  File "/home/jiangfeng/shadow_train_A/cam_filter.py", line 2661, in main
+    time.sleep(1)
+  File "/home/jiangfeng/shadow_train_A/cam_filter.py", line 2646, in signal_handler
+    def signal_handler(signum, frame):
+  File "/home/jiangfeng/shadow_train_A/cam_filter.py", line 2647, in signal_handler
+    print(f"接收到信号 {signum}，正在停止系统...")
+  File "/home/jiangfeng/shadow_train_A/cam_filter.py", line 2647, in signal_handler
+    print(f"接收到信号 {signum}，正在停止系统...")
+RuntimeError: reentrant call inside <_io.BufferedWriter name='<stdout>'>
+
+--------------------------------------------------

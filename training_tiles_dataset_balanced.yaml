@@ -1,0 +1,25 @@
+# Ultralytics YOLO 🚀, AGPL-3.0 license
+# 平衡后的训练瓦片数据集配置
+
+# 数据集根目录（相对于本 YAML）
+path: training_tiles_dataset
+
+# 训练/验证划分目录
+train: train
+val: val
+
+# 类别
+names:
+  0: zhedang    # 遮挡
+  1: zhengchang # 正常
+
+# 说明：
+# - 本配置用于在执行数据平衡后进行增量训练。
+# - 若对训练集进行过采样/数据增强以平衡类别比例，请确保增强样本复制到 train/zhedang 或 train/zhengchang 下。
+# - 验证集建议保持原始分布，便于真实性能评估。
+
+# 训练建议：
+# - epochs: 20-30
+# - lr0: 0.001
+# - batch: 16
+# - imgsz: 224

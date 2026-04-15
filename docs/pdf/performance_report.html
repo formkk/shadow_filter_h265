@@ -1,0 +1,169 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <title>performance_report.md</title>
+        <style>
+        
+@font-face {
+    font-family: "FangSong";
+    src: url("/usr/share/fonts/simfang.ttf");
+}
+
+@page {
+    size: A4;
+    margin: 2.5cm;
+    margin-bottom: 3cm;
+}
+
+body {
+    font-family: "FangSong", sans-serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    word-break: break-all;
+    word-wrap: break-word;
+}
+
+p {
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+li {
+    margin-bottom: 5px;
+    text-align: left;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "FangSong", sans-serif;
+    font-weight: bold;
+}
+
+code, pre {
+    font-family: "FangSong", monospace;
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+}
+
+table {
+    border: 1px solid #000;
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+}
+td, th {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+        </style>
+    </head>
+    <body>
+        <h1>shadow_filter应用性能对比报告：RTX3090 vs 登临 KS20</h1>
+<p><strong>测试时间</strong>: 2026-02-10 <br />
+<strong>对比项目</strong>: AI推理性能与管道延迟</p>
+<h2>1. 测试环境</h2>
+<ul>
+<li><strong>基准环境</strong>: NVIDIA RTX3090 ， patch = 32</li>
+<li><strong>对比环境</strong>: 登临科技 KS20 , patch = 2</li>
+</ul>
+<h2>2. 数据摘要 (单位: ms)</h2>
+<p>基于最近连续运行的性能日志数据进行平均值计算。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">指标</th>
+<th style="text-align: left;">RTX3090 (平均值)</th>
+<th style="text-align: left;">KS20 (平均值)</th>
+<th style="text-align: left;">差异 (ms)</th>
+<th style="text-align: left;">性能提升 (%)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>平均管道延迟 (Mean)</strong></td>
+<td style="text-align: left;">51.79</td>
+<td style="text-align: left;">44.85</td>
+<td style="text-align: left;">6.94</td>
+<td style="text-align: left;">13.40%</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>P95 延迟 (95th%)</strong></td>
+<td style="text-align: left;">71.21</td>
+<td style="text-align: left;">63.46</td>
+<td style="text-align: left;">7.75</td>
+<td style="text-align: left;">10.89%</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>最大延迟 (Max)</strong></td>
+<td style="text-align: left;">102.74</td>
+<td style="text-align: left;">70.18</td>
+<td style="text-align: left;">32.56</td>
+<td style="text-align: left;">31.69%</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>平均 AI 推理耗时</strong></td>
+<td style="text-align: left;">30.29</td>
+<td style="text-align: left;">24.31</td>
+<td style="text-align: left;">5.98</td>
+<td style="text-align: left;">19.74%</td>
+</tr>
+</tbody>
+</table>
+<h2>3. 详细分析</h2>
+<h3>3.1 管道延迟 (Pipeline Latency)</h3>
+<ul>
+<li><strong>平均延迟</strong>: KS20 平均延迟 <strong>44.85 ms</strong>，比 RTX3090 快了 <strong>13.40%</strong>。</li>
+<li><strong>稳定性 (P95)</strong>: KS20 的 P95 延迟优于 RTX3090 (63.46 ms vs 71.21 ms)，降低了 <strong>10.89%</strong>。</li>
+<li><strong>最大延迟</strong>: KS20最大延迟 <strong>70.18 ms</strong>，低于 RTX3090 的 102.74 ms，降低了 <strong>31.69%</strong>。</li>
+</ul>
+<h3>3.2 AI 推理性能 (AI Inference)</h3>
+<ul>
+<li><strong>AI 耗时</strong>: KS20 平均耗时 <strong>24.31 ms</strong>，比 RTX3090 (30.29 ms) 快了 <strong>19.74%</strong>。</li>
+</ul>
+<h2>4. 结论</h2>
+<ol>
+<li>在平均响应速度、最大延迟控制，AI 推理速度上，KS20 均优于 RTX3090。</li>
+<li>KS20 将最大延迟压制在 70ms 左右，极好地消除了 RTX3090 上可能出现的 100ms+ 长尾延时导致的卡顿。  </li>
+<li>本应用是基于yolo的图像二分类推理。模型参数规模很小，RTX3090具有10K核心，显存缓存大，适用于大参数大批次推理，对本应用的平衡patch = 32，生产时负载为20%左右。KS20在小批次 patch = 2 时，负载为34%，推理速度快，延迟低，适用于实时场景。  </li>
+<li>KS20的延迟低，稳定，可满足实时监控的需求。若进一步优化，如量化到FP16甚至INT8，KS20的推理速度还可以有10-20的预计提升。但如果实施落地应用，还要进行nvenc视频硬件编码在KS20上的移植与性能评估。</li>
+</ol>
+<p>附：原始日志数据摘录  <br />
+RTX3090平台 (2026-01-13)</p>
+<p>2026-01-13 14:22:57,21140,52.33,71.74,102.74,30.65
+2026-01-13 14:22:58,21160,52.21,71.67,102.74,30.07
+2026-01-13 14:22:59,21180,52.10,71.43,102.74,29.98
+2026-01-13 14:22:59,21200,51.83,71.27,102.74,29.70
+2026-01-13 14:23:00,21220,51.72,70.89,102.74,29.41
+2026-01-13 14:23:01,21240,51.70,71.07,102.74,29.88
+2026-01-13 14:23:02,21260,51.56,71.06,102.74,29.82
+2026-01-13 14:23:03,21280,51.73,71.21,102.74,30.45
+2026-01-13 14:23:04,21300,51.74,71.21,102.74,30.97
+2026-01-13 14:23:04,21320,51.65,71.21,102.74,31.17
+2026-01-13 14:23:05,21340,51.53,71.21,102.74,30.63
+2026-01-13 14:23:06,21360,51.53,70.69,102.74,30.94
+2026-01-13 14:23:07,21380,51.59,71.06,102.74,30.12</p>
+<p>登临KS20 (最新 2026-02-10)</p>
+<p>2026-02-10 15:11:12,2440,44.50,63.44,70.18,23.94
+2026-02-10 15:11:13,2460,44.46,63.38,70.18,24.04
+2026-02-10 15:11:14,2480,44.54,63.44,70.18,24.29
+2026-02-10 15:11:14,2500,44.68,63.46,70.18,24.36
+2026-02-10 15:11:15,2520,44.84,63.46,70.18,24.44
+2026-02-10 15:11:16,2540,44.83,63.46,70.18,24.48
+2026-02-10 15:11:17,2560,44.87,63.44,70.18,24.53
+2026-02-10 15:11:18,2580,45.05,63.46,70.18,24.47
+2026-02-10 15:11:19,2600,45.03,63.46,70.18,24.41
+2026-02-10 15:11:19,2620,45.04,63.46,70.18,24.44
+2026-02-10 15:11:20,2640,44.89,63.52,70.18,24.41
+2026-02-10 15:11:21,2660,45.19,63.53,70.18,24.35
+2026-02-10 15:11:22,2680,45.04,63.46,70.18,24.15
+2026-02-10 15:11:23,2700,44.94,63.41,70.18,24.02</p>
+    </body>
+    </html>
+    

@@ -1,0 +1,14 @@
+numpy
+opencv-python
+torch
+ultralytics
+PyWavelets
+pyyaml
+scipy
+requests
+psutil
+tqdm
+matplotlib
+seaborn
+pandas
+scikit-learn

@@ -1,0 +1,207 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <title>用户使用说明书_采训流程.md</title>
+        <style>
+        
+@font-face {
+    font-family: "FangSong";
+    src: url("/usr/share/fonts/simfang.ttf");
+}
+
+@page {
+    size: A4;
+    margin: 2.5cm;
+    margin-bottom: 3cm;
+}
+
+body {
+    font-family: "FangSong", sans-serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    word-break: break-all;
+    word-wrap: break-word;
+}
+
+p {
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+li {
+    margin-bottom: 5px;
+    text-align: left;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "FangSong", sans-serif;
+    font-weight: bold;
+}
+
+code, pre {
+    font-family: "FangSong", monospace;
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+}
+
+table {
+    border: 1px solid #000;
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+}
+td, th {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+        </style>
+    </head>
+    <body>
+        <h1>用户使用说明书（采集-分割-标注-平衡-增量训练-评估）</h1>
+<h2>一、准备工作</h2>
+<ul>
+<li>确认已安装依赖：<code>pip install -r requirements.txt</code></li>
+<li>摄像头已连接并出现在 <code>/dev/video0-3</code>（如数量不同，采集脚本可调整）。</li>
+<li>GPU：请确保 CUDA 驱动正常。</li>
+</ul>
+<h2>二、采集</h2>
+<p>脚本：<code>continuous_camera_capture.py</code>
+- 功能：从多个摄像头持续拍照，保存到目录。
+- 默认参数（在脚本中主函数）：
+  - <code>output_dir="continuous_photos"</code>：输出目录
+  - <code>duration=30</code>：持续拍照 30 秒
+  - <code>interval=0.02</code>：每 0.02 秒拍一张
+- 运行：</p>
+<pre><code class="language-bash">python continuous_camera_capture.py
+</code></pre>
+<ul>
+<li>输出：在 <code>continuous_photos/</code> 生成 <code>camera_&lt;id&gt;_&lt;timestamp&gt;.jpg</code>。</li>
+</ul>
+<p>提示：如需自定义摄像头索引、时长、间隔，可修改脚本初始化参数或改写为命令行参数版本。</p>
+<h2>三、图像分割</h2>
+<p>脚本：<code>split_images_for_training.py</code>
+- 功能：将大图分割为 <code>224x224</code> 瓦片，用于分类训练。
+- 常用参数：
+  - <code>--input_dir</code>：输入目录，如 <code>./continuous_photos</code>
+  - <code>--output_dir</code>：输出目录，建议为 <code>./training_tiles</code>
+  - <code>--tile_size</code>：瓦片大小，默认 224
+  - <code>--class_name</code>：类别名；若未标注前，建议使用 <code>unknown</code>
+- 示例：</p>
+<pre><code class="language-bash">python split_images_for_training.py --input_dir ./continuous_photos --output_dir ./training_tiles --tile_size 224 --class_name unknown
+</code></pre>
+<ul>
+<li>输出：<code>training_tiles/unknown/</code> 下生成瓦片。</li>
+</ul>
+<h2>四、标注与移动到分类目录</h2>
+<p>对training_tiles/unknow 内所有图片进行人工筛选.
+- 浏览training_tiles/unknown/目录，并将图片人工辨别后，根据图片类别分别移动至 training_tiles/zhedang/ 或 training_tiles/zhengchang/ 目录内，
+- 完成后删除training_tiles/unknown/子目录。</p>
+<h2>五、构建训练/验证集结构</h2>
+<p>脚本：<code>prepare_dataset_split.py</code>
+- 功能：将 <code>training_tiles/</code> 中的已分类瓦片按比例拆分到 <code>training_tiles_dataset/train</code> 与 <code>val</code>。
+- 常用参数：
+  - <code>--input_root</code>：输入根目录，如 <code>./training_tiles</code>
+  - <code>--output_root</code>：输出根目录，如 <code>./training_tiles_dataset</code>
+  - <code>--train_ratio</code>：训练集比例，默认 0.8
+  - <code>--seed</code>：随机种子，默认 42（保证可复现）
+  - <code>--move</code>：移动文件而非复制（默认复制）
+- 示例：</p>
+<pre><code class="language-bash">python prepare_dataset_split.py --input_root ./training_tiles --output_root ./training_tiles_dataset --train_ratio 0.8 --seed 42
+</code></pre>
+<ul>
+<li>输出：生成 <code>training_tiles_dataset/train</code> 与 <code>val</code> 下的两个类别子目录。</li>
+</ul>
+<h2>六、数据平衡（训练集）</h2>
+<p>脚本：<code>balance_dataset.py</code>
+- 功能：对 <code>train</code> 或 <code>val</code> 集进行过采样/欠采样，建议仅对 <code>train</code> 进行过采样。
+- 常用参数：
+  - <code>--input_dir</code> 与 <code>--output_dir</code>：都指向 <code>./training_tiles_dataset</code>
+  - <code>--method</code>：<code>oversample</code> 或 <code>undersample</code>
+  - <code>--split</code>：<code>train</code> 或 <code>val</code>
+- 示例：</p>
+<pre><code class="language-bash">python balance_dataset.py --input_dir ./training_tiles_dataset --output_dir ./training_tiles_dataset --method oversample --split train
+</code></pre>
+<ul>
+<li>输出：在 <code>training_tiles_dataset/train/&lt;class&gt;</code> 下增加增强样本。</li>
+</ul>
+<p>提示：为避免评估偏差，<code>val</code> 集通常不做平衡处理。</p>
+<h2>七、增量训练</h2>
+<p>在增量训练前，建议先备份原模型：</p>
+<pre><code class="language-bash">cp ./best.pt ./backups/best.pt.bak
+</code></pre>
+<p>脚本：<code>incremental_train.py</code>
+- 功能：加载已有 <code>best.pt</code> 并在新数据上继续训练。
+- 常用参数：
+  - <code>--model</code>：预训练模型路径（如 <code>./runs/classify/incremental_train/weights/best.pt</code>）
+  - <code>--data</code>：数据集配置 YAML（未平衡用 <code>training_tiles_dataset.yaml</code>，平衡后用 <code>training_tiles_dataset_balanced.yaml</code>）
+  - <code>--epochs</code>：训练轮数（建议 20-30）
+  - <code>--lr0</code>：初始学习率（默认 0.001）
+  - <code>--batch</code>：批次大小（默认 16）
+  - <code>--imgsz</code>：输入尺寸（默认 224）
+  - <code>--device</code>：设备（如 <code>0</code>）
+  - <code>--patience</code>：早停耐心（建议 10-30）
+- 示例：</p>
+<pre><code class="language-bash">python incremental_train.py --model ./best.pt --data training_tiles_dataset_balanced.yaml --epochs 25 --lr0 0.001 --batch 16 --imgsz 224 --device 0 --project runs/classify --name incremental_train_new --patience 10
+</code></pre>
+<ul>
+<li>
+<p>输出：训练日志与权重保存在 <code>runs/classify/incremental_train_new1/</code>。</p>
+</li>
+<li>
+<p>应用新权重：</p>
+</li>
+</ul>
+<pre><code class="language-bash">cp ./runs/classify/incremental_train_new1/weights/best.pt ./best.pt
+</code></pre>
+<h2>八、注意事项（路径与一致性）</h2>
+<ul>
+<li>路径统一：所有脚本默认使用相对路径，确保在项目根目录运行。</li>
+<li>分类命名：仅使用两个类别 <code>zhedang</code>、<code>zhengchang</code>；避免出现其他目录影响训练。</li>
+<li>分割与标注：分割阶段可先放入 <code>unknown</code>，标注后应将其清空。</li>
+<li>平衡：仅对训练集做过采样，验证集保持原始分布更能反映真实表现。</li>
+<li>模型路径：</li>
+<li>原模型：<code>./best.pt</code></li>
+<li>新模型训练输出目录与权重由 <code>--project</code> 与 <code>--name</code> 决定。</li>
+</ul>
+<h2>九、问题排查</h2>
+<ul>
+<li>摄像头不能打开：检查 <code>/dev/video*</code> 与权限；修改脚本中的摄像头索引。</li>
+<li>训练失败：检查 YAML 路径、目录结构（必须包含 <code>train/val/&lt;class&gt;</code>）、GPU 显存。</li>
+<li>评估为 None：升级或保持 Ultralytics 版本一致；若 <code>results_dict</code> 键不同，脚本已做兼容处理。</li>
+</ul>
+<h2>十、示例流程（快速执行）</h2>
+<p>1) 采集</p>
+<pre><code class="language-bash">python continuous_camera_capture.py
+</code></pre>
+<p>2) 分割到 unknown</p>
+<pre><code class="language-bash">python split_images_for_training.py --input_dir ./continuous_photos --output_dir ./training_tiles --class_name unknown
+</code></pre>
+<p>3) 标注并归类 ，
+用人工浏览training_tiles/unknown/目录，并将图片人工辨别后，根据图片类别分别移动至 training_tiles/zhedang/ 与 training_tiles/zhengchang/ 目录内，完成后删除training_tiles/unknown/目录。</p>
+<p>4) 构建 train/val</p>
+<pre><code class="language-bash">python prepare_dataset_split.py --input_root ./training_tiles --output_root ./training_tiles_dataset --train_ratio 0.8
+</code></pre>
+<p>5) 训练集平衡</p>
+<pre><code class="language-bash">python balance_dataset.py --input_dir ./training_tiles_dataset --output_dir ./training_tiles_dataset --method oversample --split train
+</code></pre>
+<p>6) 增量训练
+在增量训练前，建议先备份原模型：</p>
+<pre><code class="language-bash">cp ./best.pt ./bakups/best.bak.pt
+</code></pre>
+<p>训练</p>
+<pre><code class="language-bash">python incremental_train.py --model ./best.pt --data training_tiles_dataset_balanced.yaml --epochs 25 --lr0 0.001 --batch 16 --imgsz 224 --device 0 --project runs/classify --name incremental_train_new --patience 10
+</code></pre>
+<p>7) 应用新权重：</p>
+<pre><code class="language-bash">cp ./runs/classify/incremental_train_new1/weights/best.pt ./best.pt
+</code></pre>
+    </body>
+    </html>
+    

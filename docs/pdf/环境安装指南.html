@@ -1,0 +1,160 @@
+
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <title>环境安装指南.md</title>
+        <style>
+        
+@font-face {
+    font-family: "FangSong";
+    src: url("/usr/share/fonts/simfang.ttf");
+}
+
+@page {
+    size: A4;
+    margin: 2.5cm;
+    margin-bottom: 3cm;
+}
+
+body {
+    font-family: "FangSong", sans-serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    word-break: break-all;
+    word-wrap: break-word;
+}
+
+p {
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+li {
+    margin-bottom: 5px;
+    text-align: left;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "FangSong", sans-serif;
+    font-weight: bold;
+}
+
+code, pre {
+    font-family: "FangSong", monospace;
+    background-color: #f5f5f5;
+    padding: 2px 4px;
+}
+
+table {
+    border: 1px solid #000;
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+}
+td, th {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+
+        </style>
+    </head>
+    <body>
+        <h1>环境安装与运行指南</h1>
+<h2>1. 基础环境要求</h2>
+<ul>
+<li><strong>操作系统</strong>: Linux (推荐 Ubuntu 20.04/22.04)</li>
+<li><strong>Python</strong>: 3.10+ (建议使用 Conda 管理环境)</li>
+<li><strong>硬件</strong>:</li>
+<li>摄像头: 支持 V4L2 协议的采集卡/摄像头 (可见 <code>/dev/video*</code>)</li>
+<li>GPU: NVIDIA 显卡 (推荐, 用于加速 YOLO 推理与 NVENC 编码)</li>
+<li><strong>软件依赖</strong>:</li>
+<li>FFmpeg (必须支持 NVENC 以获得最佳性能)</li>
+<li>CUDA Toolkit (对应 PyTorch 版本)</li>
+</ul>
+<hr />
+<h2>2. 系统级依赖安装</h2>
+<h3>2.1 安装基础工具与 FFmpeg</h3>
+<pre><code class="language-bash">sudo apt-get update
+sudo apt-get install -y ffmpeg v4l-utils libssl-dev git build-essential
+</code></pre>
+<h3>2.2 验证摄像头</h3>
+<p>确保摄像头设备已正确识别：</p>
+<pre><code class="language-bash">ls -l /dev/video*
+v4l2-ctl --list-devices
+</code></pre>
+<hr />
+<h2>3. Python 环境配置</h2>
+<p>推荐使用 Miniconda 创建独立环境，避免依赖冲突。</p>
+<h3>3.1 创建 Conda 环境</h3>
+<pre><code class="language-bash"># 创建名为 shadow_env 的环境，指定 Python 3.10
+conda create -n shadow_env python=3.10 -y
+conda activate shadow_env
+</code></pre>
+<h3>3.2 安装 PyTorch</h3>
+<p>根据您的 CUDA 版本选择合适的安装命令（以下以 CUDA 12.1 为例）：</p>
+<pre><code class="language-bash">conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -y
+</code></pre>
+<p><em>注：若无 NVIDIA 显卡，可安装 CPU 版本，但推理速度会受影响。</em></p>
+<h3>3.3 安装项目依赖</h3>
+<p>在项目根目录 (<code>/home/jiangfeng/shadow_filter_h265</code>) 下执行：</p>
+<pre><code class="language-bash">pip install -r requirements.txt
+</code></pre>
+<hr />
+<h2>4. MediaMTX (RTSP 服务器) 配置</h2>
+<p>本项目集成了对 MediaMTX 的自动管理，但首次运行需准备程序包。</p>
+<h3>4.1 下载与放置</h3>
+<ol>
+<li>访问 <a href="https://github.com/bluenviron/mediamtx/releases">MediaMTX Releases</a>。</li>
+<li>下载适用于 Linux 的压缩包 (例如 <code>mediamtx_v1.x.x_linux_amd64.tar.gz</code>)。</li>
+<li>将下载的文件重命名为 <code>mediamtx.tar.gz</code>。</li>
+<li>将文件放置在项目的 <code>rtsp_server/</code> 目录下。</li>
+</ol>
+<p><strong>目录结构示例</strong>:</p>
+<pre><code>shadow_filter_h265/
+├── cam_filter.py
+├── requirements.txt
+└── rtsp_server/
+    └── mediamtx.tar.gz  &lt;-- 放置在这里
+</code></pre>
+<p><em>系统首次启动时会自动解压并配置该文件。</em></p>
+<hr />
+<h2>5. 运行与验证</h2>
+<h3>5.1 启动筛选应用</h3>
+<pre><code class="language-bash"># 激活环境
+conda activate shadow_env
+
+# 启动主程序
+python cam_filter.py
+</code></pre>
+<h3>5.2 验证运行状态</h3>
+<ol>
+<li><strong>控制台日志</strong>: 应显示 "ONVIF Server 启动成功" 及各路流的 RTSP 地址。</li>
+<li><strong>RTSP 播放</strong>:
+    使用 VLC 或 ffplay 播放测试（替换 IP 为实际地址）：
+    <code>bash
+    ffplay -rtsp_transport tcp rtsp://shadow:password147@&lt;IP&gt;:8554/filter_h264</code></li>
+</ol>
+<h3>5.3 常见问题排查</h3>
+<ul>
+<li><strong>权限错误 (Permission denied)</strong>: 确保当前用户有权访问 <code>/dev/video*</code> 设备，或尝试 <code>sudo chmod 666 /dev/video*</code>。</li>
+<li><strong>MediaMTX 启动失败</strong>: 检查 <code>rtsp_server/mediamtx.tar.gz</code> 是否存在且完整；检查 <code>8554</code> 端口是否被占用。</li>
+<li><strong>ImportError: libGL.so.1</strong>: 若缺失 OpenCV 依赖，执行 <code>sudo apt-get install libgl1</code>。</li>
+</ul>
+<hr />
+<h2>6. 采训流程环境 (进阶)</h2>
+<p>若需执行数据采集、数据集制作及模型训练 (<code>split_images_for_training.py</code>, <code>prepare_dataset_split.py</code> 等脚本)：</p>
+<ol>
+<li><strong>Scikit-learn</strong>: 确保已安装 (requirements.txt 已包含)。
+    <code>bash
+    pip install scikit-learn</code></li>
+<li><strong>数据目录</strong>: 确保有足够的磁盘空间用于存储采集的原始图片及切片后的数据集。</li>
+</ol>
+    </body>
+    </html>
+    

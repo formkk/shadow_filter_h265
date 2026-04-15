@@ -1,0 +1,74 @@
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [udp, tcp]
+rtspAuthMethods: [basic, digest]
+rtmp: no
+hls: no
+webrtc: no
+srt: no
+
+authInternalUsers:
+- user: any
+  pass:
+  permissions:
+  - action: read
+- user: shadow
+  pass: password147
+  permissions:
+  - action: publish
+  - action: read
+
+paths:
+  live:
+    source: publisher
+    overridePublisher: yes
+  live_h264:
+    source: publisher
+    overridePublisher: yes
+  monitor:
+    source: publisher
+    overridePublisher: yes
+  filter:
+    source: publisher
+    overridePublisher: yes
+  monitor_h264:
+    source: publisher
+    overridePublisher: yes
+  filter_h264:
+    source: publisher
+    overridePublisher: yes
+  monitor_h265:
+    source: publisher
+    overridePublisher: yes
+  filter_h265:
+    source: publisher
+    overridePublisher: yes
+  optimized_live:
+    source: rtsp://shadow:password147@127.0.0.1:8554/monitor_h264
+    sourceOnDemand: yes
+  Streaming/Channels/101:
+    source: rtsp://shadow:password147@127.0.0.1:8554/monitor_h264
+    sourceOnDemand: yes
+  Streaming/Channels/102:
+    source: rtsp://shadow:password147@127.0.0.1:8554/filter_h264
+    sourceOnDemand: yes
+
+  Monitor:
+    source: rtsp://shadow:password147@127.0.0.1:8554/monitor_h264
+    sourceOnDemand: yes
+
+  Profile1:
+    source: rtsp://shadow:password147@127.0.0.1:8554/filter_h264
+    sourceOnDemand: yes
+
+  profile1:
+    source: rtsp://shadow:password147@127.0.0.1:8554/filter_h264
+    sourceOnDemand: yes
+
+  streaming/channels/101:
+    source: rtsp://shadow:password147@127.0.0.1:8554/monitor_h264
+    sourceOnDemand: yes
+
+  streaming/channels/102:
+    source: rtsp://shadow:password147@127.0.0.1:8554/filter_h264
+    sourceOnDemand: yes
